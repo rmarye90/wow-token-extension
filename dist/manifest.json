@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "WoW Token Price",
+  "version": "0.1.0",
+  "description": "Prix du WoW Token EU en temps réel",
+  "permissions": ["storage", "alarms"],
+  "host_permissions": [
+    "https://*.api.blizzard.com/*",
+    "https://eu.battle.net/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "WoW Token Price"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  }
+}

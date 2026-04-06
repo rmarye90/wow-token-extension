@@ -1,0 +1,1 @@
+function e(e){return{gold:Math.floor(e/1e4),silver:Math.floor(e%1e4/100),copper:e%100}}function t(e){let t=Math.floor(e/1e4);return t>=1e6?`${(t/1e6).toFixed(1)}M`:t>=1e3?`${Math.round(t/1e3)}k`:`${t}`}export{e as n,t};
