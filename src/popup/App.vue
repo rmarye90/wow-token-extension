@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { formatGold } from '../types.js'
+import { formatGold, findClosest, diffFrom } from '../types.js'
 import type { StoredData, TokenSnapshot } from '../types.js'
 
 const data = ref<StoredData | null>(null)
@@ -13,16 +13,6 @@ const formatted = computed(() => {
   return formatGold(current.value.price)
 })
 
-const trend = computed(() => {
-  const history = data.value?.history
-  if (!history || history.length < 2) return null
-  const prev = history[history.length - 2]
-  const curr = history[history.length - 1]
-  const diffCopper = curr.price - prev.price
-  const diffGold = Math.round(diffCopper / 10000)
-  return { diffGold, up: diffCopper >= 0 }
-})
-
 const lastUpdated = computed(() => {
   if (!current.value) return null
   const diff = Date.now() - current.value.timestamp
@@ -32,6 +22,26 @@ const lastUpdated = computed(() => {
   if (minutes < 60) return `il y a ${minutes} min`
   const hours = Math.floor(minutes / 60)
   return `il y a ${hours}h`
+})
+
+const PERIODS = [
+  { label: '1h',    ms: 60 * 60_000 },
+  { label: '1 sem', ms: 7 * 24 * 60 * 60_000 },
+  { label: '1 mois', ms: 30 * 24 * 60 * 60_000 },
+]
+
+const comparisons = computed(() => {
+  const curr = current.value
+  const history = data.value?.history
+  if (!curr || !history) return []
+
+  return PERIODS.map(({ label, ms }) => {
+    const target = curr.timestamp - ms
+    const ref = findClosest(history.filter(s => s.timestamp <= curr.timestamp - ms * 0.5), target)
+    if (!ref) return { label, available: false as const }
+    const { diffGold, pct, up } = diffFrom(curr, ref)
+    return { label, available: true as const, diffGold, pct, up }
+  })
 })
 
 async function loadData(): Promise<void> {
@@ -74,15 +84,25 @@ onMounted(loadData)
           <span class="silver">{{ String(formatted!.silver).padStart(2, '0') }}</span><span class="unit">s</span>
           <span class="copper-val">{{ String(formatted!.copper).padStart(2, '0') }}</span><span class="unit">c</span>
         </div>
-        <div v-if="trend" class="trend" :class="trend.up ? 'up' : 'down'">
-          {{ trend.up ? '▲' : '▼' }}
-          {{ trend.diffGold > 0 ? '+' : '' }}{{ trend.diffGold.toLocaleString('fr-FR') }}g
+      </div>
+
+      <div class="comparisons">
+        <div
+          v-for="c in comparisons"
+          :key="c.label"
+          class="row"
+        >
+          <span class="period">{{ c.label }}</span>
+          <span v-if="!c.available" class="na">—</span>
+          <span v-else class="diff" :class="c.up ? 'up' : 'down'">
+            {{ c.up ? '▲' : '▼' }}
+            {{ c.diffGold > 0 ? '+' : '' }}{{ c.diffGold.toLocaleString('fr-FR') }}g
+            <span class="pct">({{ c.up ? '+' : '-' }}{{ c.pct }}%)</span>
+          </span>
         </div>
       </div>
 
-      <div class="meta">
-        MAJ : {{ lastUpdated }}
-      </div>
+      <div class="meta">MAJ : {{ lastUpdated }}</div>
     </template>
 
     <footer>
@@ -134,7 +154,7 @@ header {
 
 .price-block {
   text-align: center;
-  padding: 8px 0 4px;
+  padding: 6px 0 2px;
 }
 
 .price-main {
@@ -147,18 +167,43 @@ header {
   line-height: 1;
 }
 
-.gold   { color: #FFD700; }
-.silver { color: #C0C0C0; font-size: 15px; }
+.gold      { color: #FFD700; }
+.silver    { color: #C0C0C0; font-size: 15px; }
 .copper-val { color: #B87333; font-size: 13px; }
-.unit   { font-size: 12px; color: #666; margin-right: 4px; }
+.unit      { font-size: 12px; color: #666; margin-right: 4px; }
 
-.trend {
-  margin-top: 5px;
-  font-size: 12px;
-  font-weight: 500;
+.comparisons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid #1e1e2e;
+  border-bottom: 1px solid #1e1e2e;
+  padding: 8px 0;
 }
-.trend.up   { color: #4CAF50; }
-.trend.down { color: #F44336; }
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.period {
+  color: #666;
+  min-width: 48px;
+}
+
+.na { color: #444; font-size: 11px; }
+
+.diff { font-weight: 600; }
+.diff.up   { color: #4CAF50; }
+.diff.down { color: #F44336; }
+
+.pct {
+  font-weight: 400;
+  font-size: 11px;
+  opacity: 0.8;
+}
 
 .meta {
   text-align: center;
@@ -166,7 +211,7 @@ header {
   color: #555;
 }
 
-.no-settings, .no-data {
+.no-data {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -180,8 +225,6 @@ footer {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
-  border-top: 1px solid #1e1e2e;
-  padding-top: 8px;
 }
 
 .btn-primary {

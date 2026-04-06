@@ -1,9 +1,8 @@
 import { fetchTokenPrice } from '../api/worker.js'
-import { formatBadge } from '../types.js'
+import { formatBadge, MAX_HISTORY } from '../types.js'
 import type { StoredData, StoredSettings, TokenSnapshot } from '../types.js'
 
 const ALARM_NAME = 'wow-token-refresh'
-const MAX_HISTORY = 24
 
 async function getSettings(): Promise<StoredSettings> {
   const result = await chrome.storage.sync.get('settings')
