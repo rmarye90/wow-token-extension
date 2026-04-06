@@ -1,5 +1,5 @@
 import { fetchTokenPrice } from '../api/worker.js'
-import { formatBadge, MAX_HISTORY } from '../types.js'
+import { formatBadge } from '../types.js'
 import type { StoredData, StoredSettings, TokenSnapshot } from '../types.js'
 
 const ALARM_NAME = 'wow-token-refresh'
@@ -9,25 +9,14 @@ async function getSettings(): Promise<StoredSettings> {
   return (result.settings as StoredSettings) ?? { refreshInterval: 5 }
 }
 
-async function getStoredData(): Promise<StoredData> {
-  const result = await chrome.storage.local.get('data')
-  return (result.data as StoredData) ?? { current: null, history: [] }
-}
-
 async function saveData(snapshot: TokenSnapshot): Promise<void> {
-  const existing = await getStoredData()
-  const history = [...existing.history, snapshot].slice(-MAX_HISTORY)
-  await chrome.storage.local.set({ data: { current: snapshot, history } satisfies StoredData })
+  await chrome.storage.local.set({ data: { current: snapshot } satisfies StoredData })
 }
 
 async function refresh(): Promise<void> {
   try {
     const result = await fetchTokenPrice()
-    const snapshot: TokenSnapshot = {
-      price: result.price,
-      timestamp: Date.now(),
-    }
-    await saveData(snapshot)
+    await saveData({ price: result.price, timestamp: Date.now() })
     chrome.action.setBadgeText({ text: formatBadge(result.price) })
     chrome.action.setBadgeBackgroundColor({ color: '#C69B3A' })
   } catch {
@@ -56,9 +45,7 @@ chrome.runtime.onStartup.addListener(async () => {
 })
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name === ALARM_NAME) {
-    await refresh()
-  }
+  if (alarm.name === ALARM_NAME) await refresh()
 })
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

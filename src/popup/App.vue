@@ -1,21 +1,21 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { formatGold, findClosest, diffFrom } from '../types.js'
-import type { StoredData, TokenSnapshot } from '../types.js'
+import { formatGold } from '../types.js'
+import { fetchTokenPrice } from '../api/worker.js'
+import type { WorkerTokenResponse } from '../api/worker.js'
 
-const data = ref<StoredData | null>(null)
+const tokenData = ref<WorkerTokenResponse | null>(null)
 const loading = ref(false)
-
-const current = computed<TokenSnapshot | null>(() => data.value?.current ?? null)
+const error = ref(false)
 
 const formatted = computed(() => {
-  if (!current.value) return null
-  return formatGold(current.value.price)
+  if (!tokenData.value) return null
+  return formatGold(tokenData.value.price)
 })
 
 const lastUpdated = computed(() => {
-  if (!current.value) return null
-  const diff = Date.now() - current.value.timestamp
+  if (!tokenData.value) return null
+  const diff = Date.now() - tokenData.value.lastUpdated
   const minutes = Math.floor(diff / 60_000)
   if (minutes < 1) return 'à l\'instant'
   if (minutes === 1) return 'il y a 1 min'
@@ -24,43 +24,38 @@ const lastUpdated = computed(() => {
   return `il y a ${hours}h`
 })
 
-const PERIODS = [
-  { label: '1h',    ms: 60 * 60_000 },
-  { label: '1 sem', ms: 7 * 24 * 60 * 60_000 },
-  { label: '1 mois', ms: 30 * 24 * 60 * 60_000 },
-]
-
-const comparisons = computed(() => {
-  const curr = current.value
-  const history = data.value?.history
-  if (!curr || !history) return []
-
-  return PERIODS.map(({ label, ms }) => {
-    const target = curr.timestamp - ms
-    const ref = findClosest(history.filter(s => s.timestamp <= curr.timestamp - ms * 0.5), target)
-    if (!ref) return { label, available: false as const }
-    const { diffGold, pct, up } = diffFrom(curr, ref)
-    return { label, available: true as const, diffGold, pct, up }
-  })
-})
-
-async function loadData(): Promise<void> {
-  const result = await chrome.storage.local.get('data')
-  data.value = (result.data as StoredData) ?? { current: null, history: [] }
+const PERIOD_LABELS: Record<'h1' | 'week' | 'month', string> = {
+  h1: 'il y a 1h',
+  week: 'il y a 1 sem',
+  month: 'il y a 1 mois',
 }
 
-async function refresh(): Promise<void> {
+const comparisons = computed(() => {
+  if (!tokenData.value) return []
+  const c = tokenData.value.comparisons
+  return (['h1', 'week', 'month'] as const).map(key => ({
+    label: PERIOD_LABELS[key],
+    data: c[key],
+  }))
+})
+
+async function load(): Promise<void> {
   loading.value = true
-  await chrome.runtime.sendMessage({ type: 'refresh' })
-  await loadData()
-  loading.value = false
+  error.value = false
+  try {
+    tokenData.value = await fetchTokenPrice()
+  } catch {
+    error.value = true
+  } finally {
+    loading.value = false
+  }
 }
 
 function openOptions(): void {
   chrome.runtime.openOptionsPage()
 }
 
-onMounted(loadData)
+onMounted(load)
 </script>
 
 <template>
@@ -70,14 +65,10 @@ onMounted(loadData)
       <span class="region">EU</span>
     </header>
 
-    <div v-if="!current" class="no-data">
-      <p>Aucune donnée disponible.</p>
-      <button class="btn-primary" :disabled="loading" @click="refresh">
-        {{ loading ? '…' : 'Charger' }}
-      </button>
-    </div>
+    <div v-if="loading" class="state">Chargement…</div>
+    <div v-else-if="error" class="state err">Erreur de connexion.</div>
 
-    <template v-else>
+    <template v-else-if="tokenData">
       <div class="price-block">
         <div class="price-main">
           <span class="gold">{{ formatted!.gold.toLocaleString('fr-FR') }}</span><span class="unit">g</span>
@@ -87,26 +78,22 @@ onMounted(loadData)
       </div>
 
       <div class="comparisons">
-        <div
-          v-for="c in comparisons"
-          :key="c.label"
-          class="row"
-        >
+        <div v-for="c in comparisons" :key="c.label" class="row">
           <span class="period">{{ c.label }}</span>
-          <span v-if="!c.available" class="na">—</span>
-          <span v-else class="diff" :class="c.up ? 'up' : 'down'">
-            {{ c.up ? '▲' : '▼' }}
-            {{ c.diffGold > 0 ? '+' : '' }}{{ c.diffGold.toLocaleString('fr-FR') }}g
-            <span class="pct">({{ c.up ? '+' : '-' }}{{ c.pct }}%)</span>
+          <span v-if="!c.data" class="na">—</span>
+          <span v-else class="diff" :class="c.data.up ? 'up' : 'down'">
+            {{ c.data.up ? '▲' : '▼' }}
+            {{ c.data.diffGold > 0 ? '+' : '' }}{{ c.data.diffGold.toLocaleString('fr-FR') }}g
+            <span class="pct">({{ c.data.up ? '+' : '-' }}{{ c.data.pct }}%)</span>
           </span>
         </div>
       </div>
 
-      <div class="meta">MAJ : {{ lastUpdated }}</div>
+      <div class="meta">MAJ Blizzard : {{ lastUpdated }}</div>
     </template>
 
     <footer>
-      <button class="btn-icon" :disabled="loading" title="Rafraîchir" @click="refresh">
+      <button class="btn-icon" :disabled="loading" title="Rafraîchir" @click="load">
         <span :class="{ spin: loading }">↻</span>
       </button>
       <button class="btn-icon" title="Options" @click="openOptions">⚙</button>
@@ -152,6 +139,14 @@ header {
   border-radius: 3px;
 }
 
+.state {
+  text-align: center;
+  font-size: 12px;
+  color: #666;
+  padding: 12px 0;
+}
+.state.err { color: #F44336; }
+
 .price-block {
   text-align: center;
   padding: 6px 0 2px;
@@ -175,7 +170,7 @@ header {
 .comparisons {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   border-top: 1px solid #1e1e2e;
   border-bottom: 1px solid #1e1e2e;
   padding: 8px 0;
@@ -188,11 +183,7 @@ header {
   font-size: 12px;
 }
 
-.period {
-  color: #666;
-  min-width: 48px;
-}
-
+.period { color: #666; }
 .na { color: #444; font-size: 11px; }
 
 .diff { font-weight: 600; }
@@ -211,31 +202,10 @@ header {
   color: #555;
 }
 
-.no-data {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 0;
-  font-size: 12px;
-  color: #888;
-}
-
 footer {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
-}
-
-.btn-primary {
-  background: #c8a84b;
-  color: #0d0d14;
-  border: none;
-  border-radius: 4px;
-  padding: 5px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
 }
 
 .btn-icon {
