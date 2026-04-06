@@ -5,8 +5,7 @@
   "description": "Prix du WoW Token EU en temps réel",
   "permissions": ["storage", "alarms"],
   "host_permissions": [
-    "https://*.api.blizzard.com/*",
-    "https://eu.battle.net/*"
+    "https://wow-token-price.r-maryline90.workers.dev"
   ],
   "action": {
     "default_popup": "popup.html",
