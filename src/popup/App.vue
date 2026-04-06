@@ -72,7 +72,6 @@ onMounted(load)
       <div class="price-block">
         <div class="price-main">
           <span class="gold">{{ formatted!.gold.toLocaleString('fr-FR') }}</span><span class="unit">g</span>
-          <span class="silver">{{ String(formatted!.silver).padStart(2, '0') }}</span><span class="unit">s</span>
         </div>
       </div>
 
@@ -161,9 +160,8 @@ header {
   line-height: 1;
 }
 
-.gold   { color: #FFD700; }
-.silver { color: #C0C0C0; font-size: 15px; }
-.unit   { font-size: 12px; color: #666; margin-right: 4px; }
+.gold { color: #FFD700; }
+.unit { font-size: 12px; color: #666; margin-right: 4px; }
 
 .comparisons {
   display: flex;
