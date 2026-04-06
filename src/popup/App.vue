@@ -5,7 +5,6 @@ import type { StoredData, TokenSnapshot } from '../types.js'
 
 const data = ref<StoredData | null>(null)
 const loading = ref(false)
-const hasSettings = ref(true)
 
 const current = computed<TokenSnapshot | null>(() => data.value?.current ?? null)
 
@@ -38,8 +37,6 @@ const lastUpdated = computed(() => {
 async function loadData(): Promise<void> {
   const result = await chrome.storage.local.get('data')
   data.value = (result.data as StoredData) ?? { current: null, history: [] }
-  const settings = await chrome.storage.sync.get('settings')
-  hasSettings.value = !!(settings.settings?.clientId && settings.settings?.clientSecret)
 }
 
 async function refresh(): Promise<void> {
@@ -63,12 +60,7 @@ onMounted(loadData)
       <span class="region">EU</span>
     </header>
 
-    <div v-if="!hasSettings" class="no-settings">
-      <p>Aucune clé API configurée.</p>
-      <button class="btn-primary" @click="openOptions">Configurer</button>
-    </div>
-
-    <div v-else-if="!current" class="no-data">
+    <div v-if="!current" class="no-data">
       <p>Aucune donnée disponible.</p>
       <button class="btn-primary" :disabled="loading" @click="refresh">
         {{ loading ? '…' : 'Charger' }}

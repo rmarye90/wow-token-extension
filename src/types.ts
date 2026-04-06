@@ -9,17 +9,10 @@ export interface StoredData {
 }
 
 export interface StoredSettings {
-  clientId: string
-  clientSecret: string
   refreshInterval: number  // minutes, défaut 5
 }
 
-export interface WowTokenApiResponse {
-  price: number
-  last_updated_timestamp: number
-}
-
-// Formate un prix en cuivre → "284 235g 12s 45c"
+// Formate un prix en cuivre → { gold, silver, copper }
 export function formatGold(copper: number): { gold: number; silver: number; copper: number } {
   return {
     gold: Math.floor(copper / 10000),

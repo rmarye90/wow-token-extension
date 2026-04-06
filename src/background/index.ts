@@ -1,13 +1,13 @@
-import { fetchTokenPrice } from '../api/blizzard.js'
+import { fetchTokenPrice } from '../api/worker.js'
 import { formatBadge } from '../types.js'
 import type { StoredData, StoredSettings, TokenSnapshot } from '../types.js'
 
 const ALARM_NAME = 'wow-token-refresh'
 const MAX_HISTORY = 24
 
-async function getSettings(): Promise<StoredSettings | null> {
+async function getSettings(): Promise<StoredSettings> {
   const result = await chrome.storage.sync.get('settings')
-  return (result.settings as StoredSettings) ?? null
+  return (result.settings as StoredSettings) ?? { refreshInterval: 5 }
 }
 
 async function getStoredData(): Promise<StoredData> {
@@ -22,21 +22,13 @@ async function saveData(snapshot: TokenSnapshot): Promise<void> {
 }
 
 async function refresh(): Promise<void> {
-  const settings = await getSettings()
-  if (!settings?.clientId || !settings?.clientSecret) {
-    chrome.action.setBadgeText({ text: '?' })
-    chrome.action.setBadgeBackgroundColor({ color: '#666666' })
-    return
-  }
-
   try {
-    const result = await fetchTokenPrice(settings.clientId, settings.clientSecret)
+    const result = await fetchTokenPrice()
     const snapshot: TokenSnapshot = {
       price: result.price,
       timestamp: Date.now(),
     }
     await saveData(snapshot)
-
     chrome.action.setBadgeText({ text: formatBadge(result.price) })
     chrome.action.setBadgeBackgroundColor({ color: '#C69B3A' })
   } catch {
@@ -55,12 +47,12 @@ async function scheduleAlarm(intervalMinutes: number): Promise<void> {
 
 chrome.runtime.onInstalled.addListener(async () => {
   const settings = await getSettings()
-  await scheduleAlarm(settings?.refreshInterval ?? 5)
+  await scheduleAlarm(settings.refreshInterval)
 })
 
 chrome.runtime.onStartup.addListener(async () => {
   const settings = await getSettings()
-  await scheduleAlarm(settings?.refreshInterval ?? 5)
+  await scheduleAlarm(settings.refreshInterval)
   await refresh()
 })
 
@@ -70,11 +62,10 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   }
 })
 
-// Écoute les messages depuis le popup (ex: refresh manuel)
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'refresh') {
     refresh().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }))
-    return true // async response
+    return true
   }
   if (message.type === 'settingsUpdated') {
     scheduleAlarm(message.interval ?? 5).then(() => refresh()).catch(() => {})

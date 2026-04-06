@@ -1,0 +1,7 @@
+name = "wow-token-price"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+
+# Secrets (ne jamais mettre ici — utiliser `wrangler secret put`)
+# BNET_CLIENT_ID
+# BNET_CLIENT_SECRET
